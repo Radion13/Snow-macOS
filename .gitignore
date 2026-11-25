@@ -1,0 +1,23 @@
+# Xcode and Swift Package Manager output
+build/
+.build/
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# Local files and distribution artifacts
+.DS_Store
+.env
+.env.*
+*.p12
+*.mobileprovision
+*.provisionprofile
+*.dmg
+*.pkg
+*.zip
+
+# This repository contains the macOS app only
+Windows/
