@@ -1,6 +1,10 @@
 # Установка и удаление
 
-Версия 0.2.19 — локальная сборка для проверки. Включает arm64 и x86_64, минимальная целевая ОС — macOS 12. Фактическая проверка выполнена на Apple Silicon и текущей macOS; macOS 12 и настоящий Intel требуют отдельного прогона. Публичная подпись Developer ID и нотариализация пока не настроены.
+Версия 0.2.20 — локальная сборка для проверки. Включает arm64 и x86_64, минимальная целевая ОС — macOS 12. Фактическая проверка выполнена на Apple Silicon и текущей macOS; macOS 12 и настоящий Intel требуют отдельного прогона. Публичная подпись Developer ID и нотариализация пока не настроены.
+
+Интерфейс по умолчанию на английском, даже при русском языке macOS. В меню снежинки выберите **Language → Русский** для русского языка или **Язык → English** для английского. Перевод применяется сразу и сохраняется после перезапуска. Настройки, накопленный снег и выбранный раздел при этом сохраняются. Инструкции ниже используют русские названия элементов.
+
+**English quick start:** open the DMG, drag Snow.app to Applications, and launch it. Click the snowflake in the menu bar to open Settings, pause snowfall, hide effects, or quit. Choose **Language → Русский** to switch to Russian. Your choice is saved; switch back with **Язык → English**. Press **Esc** to leave play mode. Local builds use ad-hoc signing and are not notarized; you can also build the app from source in Xcode.
 
 ## Установка
 
