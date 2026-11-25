@@ -41,6 +41,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         statusItem.menu = menu
         settings.onChange = { [weak self] in self?.settingsChanged() }
+        settings.onLanguageChanged = { [weak self] in self?.languageChanged() }
         settings.onAssetsChanged = { [weak self] in self?.overlays.values.forEach { $0.scene.decorations.reloadAssets() } }
         settings.onClean = { [weak self] in self?.runCleaner() }
         settings.onPlay = { [weak self] in self?.beginInteraction() }
@@ -69,7 +70,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         else if CommandLine.arguments.contains("--feature-check") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                let checks = FeatureChecks.run()
+                var checks = FeatureChecks.run()
+                checks.merge(self.localizationChecks(), uniquingKeysWith: { _, new in new })
                 if let data = try? JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys]),
                    let json = String(data: data, encoding: .utf8) { print(json) }
                 NSApp.terminate(nil)
@@ -123,6 +125,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let appMenu = NSMenu(title: tr("app.name"))
         let preferences = add(appMenu, "menu.settings", #selector(openSettings))
         preferences.keyEquivalent = ","
+        appMenu.addItem(makeLanguageMenuItem())
         appMenu.addItem(.separator())
         let quit = add(appMenu, "menu.quit", #selector(quitApp))
         quit.keyEquivalent = "q"
@@ -133,6 +136,26 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         windowItem.submenu = windowMenu; root.addItem(windowItem)
         NSApp.mainMenu = root
         NSApp.windowsMenu = windowMenu
+    }
+    private func makeLanguageMenuItem() -> NSMenuItem {
+        let item = NSMenuItem(title: tr("menu.language"), action: nil, keyEquivalent: "")
+        let languages = NSMenu()
+        for choice in AppLanguage.allCases {
+            let option = NSMenuItem(title: choice.name, action: #selector(selectLanguage(_:)), keyEquivalent: "")
+            option.target = self; option.representedObject = choice.rawValue
+            option.state = settings.language == choice ? .on : .off
+            languages.addItem(option)
+        }
+        item.submenu = languages
+        return item
+    }
+    private func languageChanged() {
+        installApplicationMenu()
+        statusItem.button?.image = NSImage(systemSymbolName: "snowflake", accessibilityDescription: tr("app.name"))
+        statusItem.button?.toolTip = tr("app.name")
+        statusItem.button?.setAccessibilityLabel(tr("app.name"))
+        settingsWindow?.title = tr("settings.title")
+        overlays.values.forEach { $0.scene.refreshLocalization() }
     }
     private var budget: RenderBudget {
         let info = ProcessInfo.processInfo
@@ -195,14 +218,14 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let ids = Set(overlays.values.map { UInt32($0.window.windowNumber) })
         let reading = geometry.read(excluding: ids)
         reconcileWindowState(reading)
-        let geometryMessage = reading.available ? tr("geometry.available") : tr("geometry.unavailable")
-        if settings.windowGeometryMessage != geometryMessage { settings.windowGeometryMessage = geometryMessage }
+        let geometryMessage = reading.available ? "geometry.available" : "geometry.unavailable"
+        if settings.windowGeometryMessageKey != geometryMessage { settings.windowGeometryMessageKey = geometryMessage }
         if settings.windowsAvailable != reading.available { settings.windowsAvailable = reading.available }
         let visibleDock = reading.dockFrames.contains { dock in NSScreen.screens.contains { SurfaceGeometry.dock(frame: dock, display: $0.frame, vertical: settings.value.verticalDock) != nil } }
-        let dockMessage = tr(visibleDock ? "dock.available" : "dock.unavailable")
-        let widgetMessage = tr(reading.widgets.isEmpty ? "widgets.unavailable" : "widgets.available")
-        if settings.dockMessage != dockMessage { settings.dockMessage = dockMessage }
-        if settings.widgetMessage != widgetMessage { settings.widgetMessage = widgetMessage }
+        let dockMessage = visibleDock ? "dock.available" : "dock.unavailable"
+        let widgetMessage = reading.widgets.isEmpty ? "widgets.unavailable" : "widgets.available"
+        if settings.dockMessageKey != dockMessage { settings.dockMessageKey = dockMessage }
+        if settings.widgetMessageKey != widgetMessage { settings.widgetMessageKey = widgetMessage }
         var nextFullscreen: Set<UInt32> = []
         for (id, overlay) in overlays {
             // Conservative geometry heuristic: no attempt to classify video or games.
@@ -271,12 +294,12 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if pause.isHidden || spaceTransition || overlays.isEmpty { installTimer(interval: nil) }
         else { installTimer(interval: fullscreenIDs.count == overlays.count ? 0.5 : 0.1) }
         let message: String
-        if interactionDisplay != nil { message = tr("status.interaction") }
-        else if let reason = PauseReason.allCases.first(where: { pause.reasons.contains($0) }) { message = tr("pause." + reason.rawValue) }
-        else if overlays.isEmpty { message = tr("status.noDisplays") }
-        else if fullscreenIDs.count == overlays.count { message = tr("pause.fullscreen") }
-        else { message = tr("status.running") }
-        if settings.statusMessage != message { settings.statusMessage = message }
+        if interactionDisplay != nil { message = "status.interaction" }
+        else if let reason = PauseReason.allCases.first(where: { pause.reasons.contains($0) }) { message = "pause." + reason.rawValue }
+        else if overlays.isEmpty { message = "status.noDisplays" }
+        else if fullscreenIDs.count == overlays.count { message = "pause.fullscreen" }
+        else { message = "status.running" }
+        if settings.statusMessageKey != message { settings.statusMessageKey = message }
     }
     private func installTimer(interval: TimeInterval?) {
         guard interval != (timer == nil ? nil : timerInterval) else { return }
@@ -351,6 +374,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         lights.submenu = lightMenu; menu.addItem(lights)
         menu.addItem(.separator())
+        menu.addItem(makeLanguageMenuItem())
         let settingsItem = add(menu, "menu.settings", #selector(openSettings))
         settingsItem.keyEquivalent = ","
         let quit = add(menu, "menu.quit", #selector(quitApp))
@@ -363,6 +387,11 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func togglePause() { setReason(.user, !pause.reasons.contains(.user)) }
     @objc private func toggleHidden() { setReason(.hidden, !pause.reasons.contains(.hidden)) }
     @objc private func toggleInteraction() { if interactionDisplay == nil { beginInteraction() } else { exitInteraction() } }
+    @objc private func selectLanguage(_ sender: NSMenuItem) {
+        if let raw = sender.representedObject as? String, let language = AppLanguage(rawValue: raw) {
+            settings.selectLanguage(language)
+        }
+    }
     @objc private func selectWeather(_ sender: NSMenuItem) {
         if let raw = sender.representedObject as? String, let weather = SnowWeather(rawValue: raw) { settings.value.weather = weather }
     }
@@ -428,6 +457,83 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         alert.addButton(withTitle: tr("menu.settings"))
         NSApp.activate(ignoringOtherApps: true)
         if alert.runModal() == .alertSecondButtonReturn { openSettings() }
+    }
+
+    /// Exercise the same language action used by the menu, with an open settings
+    /// window and hidden, paused snow. Restore the user's preference afterwards.
+    private func localizationChecks() -> [String: Bool] {
+        var checks: [String: Bool] = [:]
+        let domain = "local.snow.localization-check." + UUID().uuidString
+        let isolated = UserDefaults(suiteName: domain)!
+        defer { isolated.removePersistentDomain(forName: domain) }
+        isolated.set(["ru"], forKey: "AppleLanguages")
+        let fresh = AppLocalization(defaults: isolated)
+        checks["localization.englishDefaultRegardlessOfSystem"] = fresh.language == .english && fresh.text("menu.settings") == "Settings…"
+        isolated.set("unsupported-language", forKey: AppLocalization.preferenceKey)
+        checks["localization.invalidPreferenceFallsBackToEnglish"] = AppLocalization(defaults: isolated).language == .english
+        fresh.select(.russian)
+        let reloaded = AppLocalization(defaults: isolated)
+        checks["localization.russianChoicePersists"] = reloaded.language == .russian && reloaded.text("menu.settings") == "Настройки…"
+        reloaded.select(.english)
+        checks["localization.englishChoicePersists"] = AppLocalization(defaults: isolated).language == .english
+        checks["localization.unknownKeyHasSafeFallback"] = fresh.text("missing.localization.check") == "missing.localization.check"
+
+        func table(_ language: AppLanguage) -> [String: String] {
+            guard let path = Bundle.main.path(forResource: "Localizable", ofType: "strings", inDirectory: nil, forLocalization: language.rawValue),
+                  let data = FileManager.default.contents(atPath: path),
+                  let values = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: String] else { return [:] }
+            return values
+        }
+        let english = table(.english), russian = table(.russian)
+        checks["localization.bothCatalogsComplete"] = !english.isEmpty && Set(english.keys) == Set(russian.keys)
+            && english.values.allSatisfy { !$0.isEmpty } && russian.values.allSatisfy { !$0.isEmpty }
+
+        let previousLanguage = settings.language
+        let previousPreference = UserDefaults.standard.object(forKey: AppLocalization.preferenceKey)
+        let previousWindow = settingsWindow
+        let previousPause = pause
+        let previousSettings = settings.value
+        let scenes = overlays.mapValues { ObjectIdentifier($0.scene) }
+        let balls = overlays.mapValues { $0.scene.simulation.game.balls.map(\.id) }
+        defer {
+            settings.selectLanguage(previousLanguage)
+            if let previousPreference { UserDefaults.standard.set(previousPreference, forKey: AppLocalization.preferenceKey) }
+            else { UserDefaults.standard.removeObject(forKey: AppLocalization.preferenceKey) }
+            if previousWindow == nil { settingsWindow?.close(); settingsWindow = nil }
+            pause = previousPause; applyState()
+        }
+        setReason(.user, true); setReason(.hidden, true)
+        settings.selectLanguage(.english)
+        openSettings()
+        let window = settingsWindow
+        let menu = NSMenu(); menuNeedsUpdate(menu)
+        let choices = menu.items.first(where: { $0.title == "Language" })?.submenu
+        checks["localization.applicationMenuAlsoHasLanguage"] = NSApp.mainMenu?.items.first?.submenu?.items.contains(where: { $0.title == "Language" && $0.submenu?.items.count == 2 }) == true
+        let russianItem = choices?.items.first(where: { ($0.representedObject as? String) == "ru" })
+        checks["localization.languageMenuHasBothChoices"] = choices?.items.map(\.title) == ["English", "Русский"]
+            && choices?.items.first?.state == .on && russianItem?.action == #selector(selectLanguage(_:))
+        if let russianItem { selectLanguage(russianItem) }
+        checks["localization.openSettingsSwitchesImmediately"] = settingsWindow === window && window?.title == "Настройки Снега"
+            && settings.language == .russian && statusItem.button?.toolTip == "Снег"
+        checks["localization.pausedAndHiddenStatusSwitches"] = settings.statusMessage == russian[settings.statusMessageKey]
+            && settings.windowGeometryMessage == russian[settings.windowGeometryMessageKey]
+            && settings.dockMessage == russian[settings.dockMessageKey]
+            && settings.widgetMessage == russian[settings.widgetMessageKey]
+        menuNeedsUpdate(menu)
+        let russianChoices = menu.items.first(where: { $0.title == "Язык" })?.submenu
+        checks["localization.selectedLanguageIsChecked"] = russianChoices?.items.last?.state == .on
+            && russianChoices?.items.first?.state == .off
+        let isolatedStore = SettingsStore(defaults: isolated)
+        isolatedStore.reset()
+        checks["localization.resetPreservesLanguage"] = settings.language == .russian && AppLocalization.shared.language == .russian
+        if let englishItem = russianChoices?.items.first { selectLanguage(englishItem) }
+        checks["localization.switchBackToEnglish"] = settingsWindow === window && window?.title == "Snow Settings"
+            && settings.statusMessage == english[settings.statusMessageKey] && statusItem.button?.toolTip == "Snow"
+        checks["localization.preservesSnowAndSettings"] = settings.value == previousSettings
+            && overlays.mapValues({ ObjectIdentifier($0.scene) }) == scenes
+            && overlays.mapValues({ $0.scene.simulation.game.balls.map(\.id) }) == balls
+            && pause.reasons.contains(.hidden) && pause.reasons.contains(.user)
+        return checks
     }
 
     /// Opt-in lifecycle diagnostics. Reports only our own state, never foreign window titles.
