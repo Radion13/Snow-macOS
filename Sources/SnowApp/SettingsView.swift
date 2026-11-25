@@ -35,6 +35,7 @@ struct SettingsView: View {
                 }.padding(26).frame(maxWidth: .infinity, alignment: .leading)
             }
         }.frame(width: 800, height: 600)
+        .environment(\.locale, store.language.locale)
         .alert(tr("reset.title"), isPresented: $resetConfirmation) {
             Button(tr("reset.confirm"), role: .destructive) { store.reset() }
             Button(tr("cancel"), role: .cancel) {}
@@ -43,17 +44,19 @@ struct SettingsView: View {
     @ViewBuilder private var content: some View {
         switch store.activePane {
         case .snow:
+            // AppKit-backed pickers cache their option labels. Recreate only the
+            // control on a language change, preserving its binding and pane state.
             Picker(tr("snow.weather"), selection: $store.value.weather) {
                 ForEach(SnowWeather.allCases, id: \.self) { Text(tr("weather." + $0.rawValue)).tag($0) }
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).id(store.language)
             Picker(tr("snow.appearance"), selection: $store.value.snowAppearance) {
                 ForEach(SnowAppearance.allCases, id: \.self) { Text(tr("snow.appearance." + $0.rawValue)).tag($0) }
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).id(store.language)
             help("snow.appearance.help")
             Divider()
             Picker(tr("snowflakes.style"), selection: $store.value.snowflakeStyle) {
                 ForEach(SnowflakeStyle.allCases, id: \.self) { Text(tr("snowflakes." + $0.rawValue)).tag($0) }
-            }.pickerStyle(.segmented)
+            }.pickerStyle(.segmented).id(store.language)
             if SnowAppFeatures.snowflakePreviews && store.value.snowflakeStyle == .patterned {
                 HStack(spacing: 8) {
                     ForEach(0..<SnowflakeArt.variantCount, id: \.self) { index in
@@ -110,7 +113,7 @@ struct SettingsView: View {
         case .play:
             Picker(tr("menu.tool"), selection: $store.selectedTool) {
                 ForEach(SnowTool.allCases, id: \.self) { tool in Text(tr("tool." + tool.rawValue)).tag(tool) }
-            }
+            }.id(store.language)
             Button(tr("game.start")) { store.onPlay?() }.disabled(store.effectPaused)
             help("game.instructions"); help("game.stacking"); help("game.limits"); help("game.delete")
         case .cleaner:
@@ -118,14 +121,14 @@ struct SettingsView: View {
                 ForEach(CleanerCharacter.allCases, id: \.self) { character in
                     Text(tr("cleaner." + character.rawValue)).tag(character)
                 }
-            }
+            }.id(store.language)
             Button(tr("cleaner.run")) { store.onClean?() }.disabled(store.effectPaused)
             if store.effectPaused { help("cleaner.paused") }
             Toggle(tr("cleaner.auto"), isOn: $store.value.automaticCleaner); help("cleaner.auto.help")
             if SnowAppFeatures.bladeImages {
                 Toggle(tr("cleaner.blade"), isOn: $store.value.useBladeImage).disabled(ImportedAssets.image(for: .blade) == nil)
                 help("cleaner.blade.help"); Divider()
-                ImportImageView(importer: store.importer)
+                ImportImageView(importer: store.importer).id(store.language)
             }
         case .garlands:
             HStack(spacing: 8) {
@@ -146,10 +149,10 @@ struct SettingsView: View {
             }
             Picker(tr("garland.mode"), selection: $store.value.garland) {
                 ForEach(GarlandMode.allCases, id: \.self) { Text(tr("garland." + $0.rawValue)).tag($0) }
-            }
+            }.id(store.language)
             Picker(tr("garland.palette"), selection: $store.value.garlandPalette) {
                 ForEach(GarlandPalette.allCases, id: \.self) { Text(tr("palette." + $0.rawValue)).tag($0) }
-            }.disabled(store.value.garland == .off)
+            }.id(store.language).disabled(store.value.garland == .off)
             percentageSlider("garland.brightness", value: $store.value.garlandBrightness)
             percentageSlider("garland.intensity", value: $store.value.garlandBlinkIntensity)
                 .disabled((store.value.garland == .off || store.value.garland == .steady) && !store.treeShown)
@@ -159,7 +162,7 @@ struct SettingsView: View {
             ForEach(store.displayList, id: \.id) { display in
                 Picker(display.name, selection: Binding<WinterScene>(get: { store.value.scenes[display.id] ?? WinterScene.none }, set: { store.value.scenes[display.id] = $0 })) {
                     ForEach(WinterScene.allCases, id: \.self) { Text(tr("scene." + $0.rawValue)).tag($0) }
-                }
+                }.id(store.language)
             }
             help("scene.help"); help("scene.displays.help")
         case .displays:
@@ -173,7 +176,7 @@ struct SettingsView: View {
         case .performance:
             Picker(tr("performance.quality"), selection: $store.value.quality) {
                 ForEach(SnowQuality.allCases, id: \.self) { Text(tr("quality." + $0.rawValue)).tag($0) }
-            }
+            }.id(store.language)
             help("performance.help")
             Toggle(tr("performance.reduceMotion"), isOn: $store.value.respectReduceMotion); help("performance.reduceMotion.help")
         case .general:
