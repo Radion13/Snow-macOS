@@ -86,8 +86,12 @@ final class SnowScene: SKScene {
         hint.isHidden = !enabled
         // SpriteKit can expose a hidden label through accessibility. Clear its
         // text as well, so the inactive overlay does not announce game controls.
-        hint.text = enabled ? tr("interaction.hint." + tool.rawValue) : nil
+        refreshLocalization()
         lastCursor = nil
+    }
+    func refreshLocalization() {
+        hint.text = interactionEnabled ? tr("interaction.hint." + tool.rawValue) : nil
+        notice.text = lastMessage.map(tr)
     }
     override func didChangeSize(_ oldSize: CGSize) {
         simulation.size = size
