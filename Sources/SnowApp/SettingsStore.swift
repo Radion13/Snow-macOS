@@ -44,17 +44,22 @@ final class SettingsStore: ObservableObject {
     }
     @Published var loginEnabled = false
     @Published var loginMessage = ""
-    @Published var windowGeometryMessage = tr("geometry.checking")
+    @Published var windowGeometryMessageKey = "geometry.checking"
+    var windowGeometryMessage: String { tr(windowGeometryMessageKey) }
     @Published var windowsAvailable = true
     @Published var displayList: [(id: UInt32, name: String)] = []
-    @Published var statusMessage = tr("status.running")
+    @Published var statusMessageKey = "status.running"
+    var statusMessage: String { tr(statusMessageKey) }
+    @Published private(set) var language = AppLocalization.shared.language
     @Published var selectedPane: SettingsPane? = .snow
     var activePane: SettingsPane {
         guard let selectedPane, SettingsPane.visibleCases.contains(selectedPane) else { return .snow }
         return selectedPane
     }
-    @Published var dockMessage = tr("dock.checking")
-    @Published var widgetMessage = tr("widgets.checking")
+    @Published var dockMessageKey = "dock.checking"
+    var dockMessage: String { tr(dockMessageKey) }
+    @Published var widgetMessageKey = "widgets.checking"
+    var widgetMessage: String { tr(widgetMessageKey) }
     @Published var effectPaused = false
     @Published var treeShown = false
     @Published var selectedTool: SnowTool = .snowball { didSet { onToolChanged?() } }
@@ -66,6 +71,7 @@ final class SettingsStore: ObservableObject {
     var onGrowTree: (() -> Void)?
     var onRemoveTree: (() -> Void)?
     var onChange: (() -> Void)?
+    var onLanguageChanged: (() -> Void)?
     private let defaults: UserDefaults
     static let key = "snow.settings.v1"
 
@@ -80,6 +86,13 @@ final class SettingsStore: ObservableObject {
         }
     }
     func reset() { value = SnowSettings() }
+    func selectLanguage(_ language: AppLanguage) {
+        AppLocalization.shared.select(language)
+        guard language != self.language else { return }
+        self.language = language
+        refreshLoginStatus()
+        onLanguageChanged?()
+    }
     func refreshLoginStatus() {
         guard #available(macOS 13, *) else {
             loginEnabled = LegacyLoginItem.isEnabled
