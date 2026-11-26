@@ -13,6 +13,9 @@ if(WIN32)
  target_link_libraries(Snow PRIVATE user32 gdi32 gdiplus comctl32 shell32 ole32 comdlg32 dwmapi wtsapi32 windowscodecs uuid advapi32)
  if(MSVC)
   target_compile_options(Snow PRIVATE /utf-8 /W4)
+  # resources.rc already embeds our DPI/Common-Controls/UAC manifest as ID 1.
+  # Suppress the linker's second manifest to avoid CVT1100/LNK1123 on MSVC.
+  target_link_options(Snow PRIVATE /MANIFEST:NO)
   set_property(TARGET Snow PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
  endif()
  install(TARGETS Snow RUNTIME DESTINATION .)
