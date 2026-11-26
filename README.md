@@ -14,11 +14,12 @@ A small native menu bar app that turns your desktop into a winter playground. Sn
 
 - Let snow settle on window tops, the bottom of the screen, and the Dock. Rounded edges shed excess snow, and drifts keep their uneven shape.
 - Switch between simple and textured snow, or soft dots and eight patterned snowflake designs. Adjust snowfall, flake size, wind, and quality.
-- Push snow around with the mitten, knock it off a window edge, pick it up, and roll snowballs. Stack three balls to build a snowman with a bucket hat.
+- Push snow around with the mitten, knock it off a window edge, pick it up, and roll snowballs. Stack three balls to build one of four vector snowmen: festive, broom, bucket, or mittens. The first look is random; later snowmen cycle through all four.
 - Flick a snowball toward the imaginary monitor glass: it bursts into a snowy splash that melts away.
 - Send either of two animated tractors to clear the bottom drift, manually or automatically.
 - Add three styles of full-width garlands with brightness and blink controls, plus five decorated trees that grow from the bottom edge in six changing layouts.
 - Pause or hide the effects from the menu bar. Animation respects the system Reduce Motion setting.
+- Use the compact graphite menu and nine settings tabs. Selecting the mitten or snowball starts play immediately; select it again or press Esc to stop. Snow cleanup has separate buttons for the cleaner and melting all snow.
 
 The interface starts in **English**, with **Russian** available from the menu. Normal overlay mode passes clicks through to other apps; interactive play is an explicit mode. All settings and imported files stay on your Mac. There are no third-party packages, accounts, analytics, or backend services.
 
@@ -31,11 +32,23 @@ The interface starts in **English**, with **Russian** available from the menu. N
 
 ## Choose your language
 
-English is the default, regardless of your macOS language. Open the snowflake menu and choose **Language → Русский** to switch to Russian. Choose **Язык → English** to switch back.
+English is the default, regardless of your macOS language. Open the **…** menu in the compact panel, or use the language selector at the bottom of the settings sidebar, to switch between English and Russian. Right-clicking the snowflake opens the system menu.
 
 Menus, open settings, status messages, and play hints update immediately. Your choice is saved between launches. Snow, selected settings, and the current settings pane stay in place. Resetting snow settings keeps your language choice.
 
-See the [0.2.20 release notes](CHANGES_0.2.20.md) for the latest changes.
+See the [0.3.9 release notes](CHANGES_0.3.9.md) for the latest changes. The [0.3.0 notes](CHANGES_0.3.0.md) introduce the new interface; subsequent notes record its refinements.
+
+## Interface and snowmen
+
+![Compact graphite menu](docs/images/settings/menu.png)
+
+The screen selector is in full settings. The compact menu offers snowfall presets, flake appearance, size and wind, trees, snow cleanup, and the mitten and snowball tools. Its scale is 86.25% of the original design, with scrolling on shorter screens.
+
+![Four snowmen rendered by the production SpriteKit artwork](docs/images/snowmen.png)
+
+Each completed snowman keeps its look when moved between windows or displays and when snow material changes. Rebuilding it advances to the next look. Settings previews do not consume the game's appearance cycle.
+
+Settings previews: [Snow](docs/images/settings/snow.png), [Accumulation](docs/images/settings/accumulation.png), [Wind](docs/images/settings/wind.png), [Garlands](docs/images/settings/garlands.png), [Play](docs/images/settings/play.png), [Cleaner](docs/images/settings/cleaner.png), [Performance](docs/images/settings/performance.png), [Displays](docs/images/settings/displays.png), [General](docs/images/settings/general.png).
 
 ## Build and run
 
@@ -76,7 +89,7 @@ The Swift package contains **SnowCore only**. Use the Xcode project to build the
 ./scripts/package.sh
 ```
 
-This builds the app and creates `build/Snow-0.2.20-universal.dmg`, containing `Snow.app`, an Applications shortcut, and a bilingual installation guide. It verifies the disk image after creation. Installer signing and notarization are separate distribution steps.
+This builds the app and creates `build/Snow-0.3.9-universal.dmg`, containing `Snow.app`, an Applications shortcut, and a bilingual installation guide. It verifies the disk image after creation. Installer signing and notarization are separate distribution steps.
 
 ## How it is built
 
@@ -93,8 +106,8 @@ Snow materials and vector artwork are generated locally and reused as shared tex
 
 ## Current scope
 
-This is the **macOS source for version 0.2.20, build 22**. The Windows port and prebuilt installers are maintained separately and are not included here.
+This is the **macOS source for version 0.3.9, build 32**. The Windows port and prebuilt installers are maintained separately and are not included here.
 
-Builds and model checks have been run on Apple Silicon. Version 0.2.20 passed 109 core tests and 91 native feature checks, including 14 language checks; the same native checks passed through Rosetta. The [validation record](docs/VALIDATION.md) also documents two remaining window-visibility smoke checks. An Intel binary is included in Universal builds; testing on physical Intel Macs and macOS 12 remains outstanding. Multi-monitor and Dock geometry can depend on the macOS version and display configuration.
+Builds and model checks have been run on Apple Silicon. Version 0.3.9 passed 117 core tests, 103 feature and localization checks, 12 snowman rendering checks, and 20 native UI checks. Universal Release, strict signature verification, and DMG integrity checks passed. See the [validation record](docs/VALIDATION.md) and [design QA](docs/design-qa.md). An Intel binary is included in Universal builds; testing on physical Intel Macs and macOS 12 remains outstanding. Multi-monitor and Dock geometry can depend on the macOS version and display configuration.
 
-Some earlier features remain in the source but are hidden in the current interface: winter scenes, snow on widgets, snowflake preview icons, and custom images on tractor blades.
+Some earlier features remain in the source but are hidden in the current interface: the shovel and deletion tools, winter scenes, snow on widgets, snowflake preview icons, and custom images on tractor blades.

@@ -5,10 +5,18 @@ import ServiceManagement
 /// Temporarily hidden product features. Keep their implementation and saved
 /// preferences so one flag can restore both the UI and runtime behavior.
 enum SnowAppFeatures {
+    static let shovelTool = false
+    static let deleteTool = false
     static let snowflakePreviews = false
     static let bladeImages = false
     static let winterScenes = false
     static let widgetSnow = false
+}
+
+extension SnowTool {
+    static var visibleCases: [Self] {
+        allCases.filter { ($0 != .shovel || SnowAppFeatures.shovelTool) && ($0 != .delete || SnowAppFeatures.deleteTool) }
+    }
 }
 
 enum SettingsPane: String, CaseIterable, Identifiable {
@@ -61,17 +69,26 @@ final class SettingsStore: ObservableObject {
     @Published var widgetMessageKey = "widgets.checking"
     var widgetMessage: String { tr(widgetMessageKey) }
     @Published var effectPaused = false
+    @Published var userPaused = false
+    @Published var effectsHidden = false
     @Published var treeShown = false
+    @Published var interactionActive = false
     @Published var selectedTool: SnowTool = .snowball { didSet { onToolChanged?() } }
     let importer = ImageImporter()
     var onAssetsChanged: (() -> Void)?
     var onClean: (() -> Void)?
     var onPlay: (() -> Void)?
+    var onStopPlay: (() -> Void)?
     var onToolChanged: (() -> Void)?
     var onGrowTree: (() -> Void)?
     var onRemoveTree: (() -> Void)?
     var onChange: (() -> Void)?
     var onLanguageChanged: (() -> Void)?
+    var onTogglePause: (() -> Void)?
+    var onToggleHidden: (() -> Void)?
+    var onClear: (() -> Void)?
+    var onOpenSettings: (() -> Void)?
+    var onQuit: (() -> Void)?
     private let defaults: UserDefaults
     static let key = "snow.settings.v1"
 
@@ -86,6 +103,22 @@ final class SettingsStore: ObservableObject {
         }
     }
     func reset() { value = SnowSettings() }
+    func isToolActive(_ tool: SnowTool) -> Bool {
+        interactionActive && selectedTool == tool
+    }
+    func setTreesShown(_ enabled: Bool) {
+        guard !enabled || (!effectPaused && !effectsHidden) else { return }
+        if enabled { onGrowTree?() } else { onRemoveTree?() }
+    }
+    func play(with tool: SnowTool) {
+        guard !effectPaused, !effectsHidden, SnowTool.visibleCases.contains(tool) else { return }
+        if isToolActive(tool) {
+            onStopPlay?()
+            return
+        }
+        selectedTool = tool
+        onPlay?()
+    }
     func selectLanguage(_ language: AppLanguage) {
         AppLocalization.shared.select(language)
         guard language != self.language else { return }

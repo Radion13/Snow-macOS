@@ -1,4 +1,24 @@
-# macOS 0.2.20 validation
+# macOS 0.3.9 validation
+
+Checked on 26 November 2026 on Apple Silicon. Version 0.3.9, build 32.
+
+| Check | Result |
+| --- | --- |
+| Core tests | 117 passed, including 8 new snowman variant tests |
+| Feature and localization checks | 103 passed in Debug and Release |
+| Snowman rendering checks | 12 passed in Debug and Release |
+| Native UI checks | 20 passed; nine settings tabs and compact menu rendered |
+| Debug and Release builds | Universal arm64 + x86_64 |
+| Local signature | `codesign --verify --deep --strict` passed |
+| DMG | Packaging and disk image integrity checks passed |
+
+The compact menu uses a 0.8625 scale, a 24-point design gap below the header, and 16-point design gaps around dividers. Screen selection remains in full settings. The mitten and snowball toggle play directly, and Esc clears the selected tool. Garland light and palette use native popups. Snowman checks cover all four looks in both snow materials, stable redraws and display transfers, and advancing the appearance after rebuilding.
+
+Production-rendered previews: [snowmen](images/snowmen.png), [compact menu](images/settings/menu.png), and the nine tabs linked in the [README](../README.md#interface-and-snowmen). See [design QA](design-qa.md) for scope and local log names. Native commands require a graphical macOS session and no other running instance of Snow.
+
+Physical Intel hardware and macOS 12 were not tested. Universal compilation does not replace those checks. This update did not rerun the general lifecycle smoke suite; historical window-visibility results below are retained as evidence for 0.2.20. Builds use local ad-hoc signing.
+
+## Historical macOS 0.2.20 validation
 
 Checked on 25 November 2026 with Xcode 26.5 (17F42) and Swift 6.3.2 on Apple Silicon.
 

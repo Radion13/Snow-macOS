@@ -8,6 +8,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var overlays: [UInt32: OverlayController] = [:]
     private var settingsWindow: NSWindow?
+    private let statusPopover = NSPopover()
+    private var statusMenu: NSMenu!
     private var timer: Timer?
     private var timerInterval: TimeInterval = 0
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
@@ -39,12 +41,25 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         installApplicationMenu()
         let menu = NSMenu()
         menu.delegate = self
-        statusItem.menu = menu
+        statusMenu = menu
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(toggleStatusPopover(_:))
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        statusPopover.behavior = .transient
+        statusPopover.animates = false
+        statusPopover.appearance = NSAppearance(named: .darkAqua)
+        statusPopover.contentViewController = NSHostingController(rootView: StatusPopoverView(store: settings))
         settings.onChange = { [weak self] in self?.settingsChanged() }
         settings.onLanguageChanged = { [weak self] in self?.languageChanged() }
         settings.onAssetsChanged = { [weak self] in self?.overlays.values.forEach { $0.scene.decorations.reloadAssets() } }
         settings.onClean = { [weak self] in self?.runCleaner() }
-        settings.onPlay = { [weak self] in self?.beginInteraction() }
+        settings.onPlay = { [weak self] in self?.statusPopover.performClose(nil); self?.beginInteraction() }
+        settings.onStopPlay = { [weak self] in self?.exitInteraction(restore: false) }
+        settings.onTogglePause = { [weak self] in self?.togglePause() }
+        settings.onToggleHidden = { [weak self] in self?.toggleHidden() }
+        settings.onClear = { [weak self] in self?.clearSnow() }
+        settings.onOpenSettings = { [weak self] in self?.openSettings() }
+        settings.onQuit = { [weak self] in self?.quitApp() }
         settings.onToolChanged = { [weak self] in
             guard let self, let id = self.interactionDisplay else { return }
             self.overlays[id]?.setInteraction(true, tool: self.tool)
@@ -63,6 +78,28 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setReason(.hidden, true)
             materialLab = SnowMaterialLab(); materialLab?.show()
         }
+        else if let index = CommandLine.arguments.firstIndex(of: "--render-snowmen"), CommandLine.arguments.count > index + 1 {
+            setReason(.hidden, true)
+            DispatchQueue.main.async {
+                do {
+                    let checks = try SnowmanArt.renderPreviews(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+                    let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
+                    print(String(decoding: data, as: UTF8.self))
+                } catch { fputs("Snowman rendering failed: \(error.localizedDescription)\n", stderr) }
+                NSApp.terminate(nil)
+            }
+        }
+        else if let index = CommandLine.arguments.firstIndex(of: "--render-settings"), CommandLine.arguments.count > index + 1 {
+            setReason(.hidden, true)
+            DispatchQueue.main.async {
+                do {
+                    let checks = try SettingsVisualChecks.render(to: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+                    let data = try JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys])
+                    print(String(decoding: data, as: UTF8.self))
+                } catch { fputs("Settings rendering failed: \(error.localizedDescription)\n", stderr) }
+                NSApp.terminate(nil)
+            }
+        }
         else if let index = CommandLine.arguments.firstIndex(of: "--render-previews"), CommandLine.arguments.count > index + 1 {
             do { try FeatureChecks.renderPreviews(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])); print("Rendered original scene previews") }
             catch { fputs("Preview rendering failed: \(error.localizedDescription)\n", stderr) }
@@ -75,6 +112,23 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 if let data = try? JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys]),
                    let json = String(data: data, encoding: .utf8) { print(json) }
                 NSApp.terminate(nil)
+            }
+        }
+        else if CommandLine.arguments.contains("--popover-check") {
+            setReason(.hidden, true)
+            NSApp.activate(ignoringOtherApps: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.showStatusPopover()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    let window = self.statusPopover.contentViewController?.view.window
+                    let visible = window?.screen?.visibleFrame ?? .zero
+                    let checks = ["ui.popoverShown": self.statusPopover.isShown,
+                                  "ui.popoverWindowInsideScreen": window.map { visible.contains($0.frame) } ?? false,
+                                  "ui.popoverContentBounded": self.statusPopover.contentSize.height <= SnowPopoverLayout.preferredHeight]
+                    if let data = try? JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys]) { print(String(decoding: data, as: UTF8.self)) }
+                    self.statusPopover.performClose(nil)
+                    NSApp.terminate(nil)
+                }
             }
         }
         else if CommandLine.arguments.contains("--show-settings") { openSettings() }
@@ -97,6 +151,39 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+    @objc private func toggleStatusPopover(_ sender: Any?) {
+        guard let button = statusItem.button else { return }
+        if NSApp.currentEvent?.type == .rightMouseUp || NSApp.currentEvent?.modifierFlags.contains(.control) == true {
+            statusPopover.performClose(nil)
+            statusItem.menu = statusMenu
+            button.performClick(nil)
+            statusItem.menu = nil
+        } else if statusPopover.isShown {
+            statusPopover.performClose(nil)
+        } else {
+            showStatusPopover()
+        }
+    }
+    private func showStatusPopover() {
+        guard let button = statusItem.button, let anchorWindow = button.window else { return }
+        let anchor = anchorWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        let center = CGPoint(x: anchor.midX, y: anchor.midY)
+        guard let screen = NSScreen.screens.first(where: { $0.frame.contains(center) }) ?? anchorWindow.screen ?? NSScreen.main else { return }
+        let height = SnowPopoverLayout.contentHeight(visibleFrame: screen.visibleFrame, anchor: anchor)
+        let controller = NSHostingController(rootView: StatusPopoverView(store: settings, viewportHeight: height))
+        controller.preferredContentSize = NSSize(width: SnowPopoverLayout.width, height: height)
+        statusPopover.contentViewController = controller
+        statusPopover.contentSize = controller.preferredContentSize
+        statusPopover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        constrainStatusPopover(to: screen.visibleFrame)
+        DispatchQueue.main.async { [weak self] in self?.constrainStatusPopover(to: screen.visibleFrame) }
+        controller.view.window?.makeKey()
+    }
+    private func constrainStatusPopover(to visibleFrame: CGRect) {
+        guard let window = statusPopover.contentViewController?.view.window, statusPopover.isShown else { return }
+        let frame = SnowPopoverLayout.constrain(window.frame, to: visibleFrame)
+        if window.frame != frame { window.setFrame(frame, display: true) }
+    }
     func applicationDidResignActive(_ notification: Notification) { exitInteraction(restore: false) }
     func applicationDidBecomeActive(_ notification: Notification) { settings.refreshLoginStatus() }
 
@@ -123,6 +210,9 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let root = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: tr("app.name"))
+        let quickSettings = add(appMenu, "ui.quickSettings", #selector(toggleStatusPopover(_:)))
+        quickSettings.keyEquivalent = ","
+        quickSettings.keyEquivalentModifierMask = [.command, .option]
         let preferences = add(appMenu, "menu.settings", #selector(openSettings))
         preferences.keyEquivalent = ","
         appMenu.addItem(makeLanguageMenuItem())
@@ -281,6 +371,11 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
     private func applyState() {
+        let interacting = interactionDisplay != nil
+        if settings.interactionActive != interacting { settings.interactionActive = interacting }
+        let userPaused = pause.reasons.contains(.user), hidden = pause.reasons.contains(.hidden)
+        if settings.userPaused != userPaused { settings.userPaused = userPaused }
+        if settings.effectsHidden != hidden { settings.effectsHidden = hidden }
         let paused = pause.isPaused || overlays.isEmpty || fullscreenIDs.count == overlays.count
         if settings.effectPaused != paused { settings.effectPaused = paused }
         let hasTree = overlays.values.contains { $0.scene.holidayTree.isVisible }
@@ -350,9 +445,9 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         interact.isEnabled = pause.allowsInteraction && fullscreenIDs.count < overlays.count
         let tools = NSMenuItem(title: tr("menu.tool"), action: nil, keyEquivalent: "")
         let toolMenu = NSMenu()
-        for value in SnowTool.allCases {
+        for value in SnowTool.visibleCases {
             let item = add(toolMenu, "tool." + value.rawValue, #selector(selectTool(_:)))
-            item.representedObject = value.rawValue; item.state = tool == value ? .on : .off
+            item.representedObject = value.rawValue; item.state = settings.isToolActive(value) ? .on : .off
         }
         tools.submenu = toolMenu; menu.addItem(tools)
         add(menu, "menu.clear", #selector(clearSnow))
@@ -396,7 +491,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let raw = sender.representedObject as? String, let weather = SnowWeather(rawValue: raw) { settings.value.weather = weather }
     }
     @objc private func selectTool(_ sender: NSMenuItem) {
-        if let raw = sender.representedObject as? String, let value = SnowTool(rawValue: raw) {
+        if let raw = sender.representedObject as? String, let value = SnowTool(rawValue: raw), SnowTool.visibleCases.contains(value) {
             tool = value
             if let id = interactionDisplay { overlays[id]?.setInteraction(true, tool: tool) }
             else if pause.allowsInteraction { beginInteraction() }
@@ -434,13 +529,18 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc private func quitApp() { NSApp.terminate(nil) }
     @objc private func openSettings() {
+        statusPopover.performClose(nil)
         exitInteraction(restore: false)
         if settingsWindow == nil {
             let controller = NSHostingController(rootView: SettingsView(store: settings))
             let window = NSWindow(contentViewController: controller)
             window.title = tr("settings.title")
-            window.styleMask = [.titled, .closable, .miniaturizable]
-            window.setContentSize(NSSize(width: 800, height: 600))
+            window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.backgroundColor = NSColor(white: 0.065, alpha: 1)
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.setContentSize(NSSize(width: 1040, height: 660))
             window.center()
             window.isReleasedWhenClosed = false
             settingsWindow = window
@@ -562,6 +662,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
             checks["removeTreeUpdatesSettingsAndScene"] = !self.settings.treeShown && self.overlays.values.allSatisfy { !$0.scene.holidayTree.isVisible }
             self.beginInteraction()
             checks["interactionExplicit"] = self.interactionDisplay != nil && self.overlays.values.contains { !$0.window.ignoresMouseEvents }
+            checks["activeToolMatchesRunningGame"] = self.settings.interactionActive && self.settings.isToolActive(self.tool)
             // App activation and WindowServer compositing are asynchronous,
             // especially under Rosetta. Wait for a real hit region, without
             // changing focus or retrying activation to manufacture a pass.
@@ -583,6 +684,25 @@ final class AppCoordinator: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     overlay.window.cancelOperation(nil)
                 } else { checks["gameReceivesInputAtEmptyPixels"] = false }
                 checks["escapeHandlerReleasesInput"] = self.interactionDisplay == nil && self.overlays.values.allSatisfy { $0.window.ignoresMouseEvents && $0.scene.childNode(withName: "interaction.backing")?.isHidden == true }
+                let rememberedTool = self.tool
+                checks["escapeClearsToolHighlight"] = !self.settings.interactionActive && SnowTool.visibleCases.allSatisfy { !self.settings.isToolActive($0) }
+                self.settings.play(with: rememberedTool)
+                checks["sameToolRestartsAfterEscape"] = self.interactionDisplay != nil && self.settings.isToolActive(rememberedTool)
+                var toggleChecks = true
+                for tool in [SnowTool.mitten, .snowball] {
+                    self.exitInteraction(restore: false)
+                    self.settings.play(with: tool)
+                    self.showStatusPopover()
+                    toggleChecks = toggleChecks && self.statusPopover.isShown && self.settings.isToolActive(tool)
+                    self.settings.play(with: tool)
+                    toggleChecks = toggleChecks && self.statusPopover.isShown && self.interactionDisplay == nil
+                        && !self.settings.interactionActive && SnowTool.visibleCases.allSatisfy { !self.settings.isToolActive($0) }
+                        && self.overlays.values.allSatisfy { $0.window.ignoresMouseEvents && !$0.scene.interactionEnabled }
+                    self.settings.play(with: tool)
+                    toggleChecks = toggleChecks && !self.statusPopover.isShown && self.settings.isToolActive(tool)
+                }
+                checks["menuToolToggleStopsAndRestartsWithoutEscape"] = toggleChecks
+                self.exitInteraction(restore: false)
                 if let data = try? JSONSerialization.data(withJSONObject: checks, options: [.prettyPrinted, .sortedKeys]),
                    let json = String(data: data, encoding: .utf8) { print(json) }
                 NSApp.terminate(nil)

@@ -23,8 +23,8 @@ final class NativeInputLab: NSObject {
         let clear = NSButton(title: "Очистить", target: self, action: #selector(clearGame))
         clear.frame = CGRect(x: 180, y: 522, width: 120, height: 28); content.addSubview(clear)
         let tools = NSPopUpButton(frame: CGRect(x: 320, y: 522, width: 240, height: 28))
-        tools.addItems(withTitles: SnowTool.allCases.map { tr("tool." + $0.rawValue) })
-        tools.selectItem(at: SnowTool.allCases.firstIndex(of: .snowball) ?? 0)
+        tools.addItems(withTitles: SnowTool.visibleCases.map { tr("tool." + $0.rawValue) })
+        tools.selectItem(at: SnowTool.visibleCases.firstIndex(of: .snowball) ?? 0)
         tools.target = self; tools.action = #selector(changeTool(_:)); content.addSubview(tools)
         content.addSubview(view); window.contentView = content
         view.allowsTransparency = false
@@ -45,8 +45,8 @@ final class NativeInputLab: NSObject {
     }
     @objc private func clearGame() { scene.simulation.clear(); scene.redrawSurfaces(); refreshStatus() }
     @objc private func changeTool(_ sender: NSPopUpButton) {
-        guard SnowTool.allCases.indices.contains(sender.indexOfSelectedItem) else { return }
-        scene.setInteraction(true, tool: SnowTool.allCases[sender.indexOfSelectedItem]); refreshStatus()
+        guard SnowTool.visibleCases.indices.contains(sender.indexOfSelectedItem) else { return }
+        scene.setInteraction(true, tool: SnowTool.visibleCases[sender.indexOfSelectedItem]); refreshStatus()
     }
     private func refreshStatus() {
         let balls = scene.simulation.game.balls
@@ -139,7 +139,7 @@ enum FeatureChecks {
             ball.surfaceID = floor.id; ball.localX = 240; ball.anchorHeight = top + radius
             ball.supportID = index == 0 ? nil : id - 1; balls.append(ball); top += radius * 2
         }
-        return (SnowGame(balls: balls), floor, [floor.id: profile])
+        return (SnowGame(balls: balls, variantCycle: SnowmanVariantCycle(start: SnowmanVariant.classicBucket.rawValue)), floor, [floor.id: profile])
     }
     static func renderPreviews(to directory: URL) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -601,9 +601,12 @@ enum FeatureChecks {
             garlands.screenGarland.root.children.map { ObjectIdentifier($0) } == lampNodes
         let (game, floor, profiles) = snowmanFixture()
         let snowman = SnowDecorationRenderer(); snowman.drawGame(game, surfaces: [floor])
-        if let bucket = snowman.root.childNode(withName: "//snowman.bucket"),
-           let art = bucket.parent, let crop = art.parent as? SKCropNode, let mask = crop.maskNode {
-            checks["bucketFitsSnowmanCrop"] = mask.calculateAccumulatedFrame().contains(art.calculateAccumulatedFrame())
+        if let bucket = snowman.root.childNode(withName: "//snowman.bucket") {
+            var owner: SKNode? = bucket.parent
+            while owner != nil && !(owner is SKCropNode) { owner = owner?.parent }
+            if let crop = owner as? SKCropNode, let art = crop.children.first, let mask = crop.maskNode {
+                checks["bucketFitsSnowmanCrop"] = mask.calculateAccumulatedFrame().contains(art.calculateAccumulatedFrame())
+            } else { checks["bucketFitsSnowmanCrop"] = false }
         } else { checks["bucketFitsSnowmanCrop"] = false }
         var cleared = profiles; cleared[floor.id]?.clear()
         for _ in 0..<180 { game.step(delta: 1.0 / 60, surfaces: [floor], profiles: cleared, size: floor.frame.size) }
@@ -696,6 +699,7 @@ enum FeatureChecks {
         checks.merge(glassImpactChecks()) { _, new in new }
         checks.merge(snowMaterialChecks()) { _, new in new }
         checks.merge(snowmanDetailChecks()) { _, new in new }
+        checks.merge(SnowmanArt.validationChecks()) { _, new in new }
         checks.merge(edgePushChecks()) { _, new in new }
         checks.merge(snowflakeChecks()) { _, new in new }
         return checks
@@ -818,8 +822,8 @@ enum FeatureChecks {
             checks["ballMarkersRemainTransparent." + appearance.rawValue] = markers.count == 2 && markers.allSatisfy { $0.alpha == 0 } && center.redComponent > 0.55
             if appearance == .textured {
                 let left = atHead(-0.5, -0.86), right = atHead(0.5, -0.86), tail = atHead(-0.30, -1.25)
-                func red(_ color: NSColor) -> Bool { color.redComponent > 0.55 && color.greenComponent < 0.4 && color.blueComponent < 0.4 }
-                checks["scarfCollarAndTailVisibleWithBatching"] = red(left) && red(right) && red(tail)
+                func blue(_ color: NSColor) -> Bool { color.redComponent < 0.5 && color.greenComponent > 0.35 && color.blueComponent > 0.45 }
+                checks["scarfCollarAndTailVisibleWithBatching"] = blue(left) && blue(right) && blue(tail)
                 if let tailNode = renderer.root.childNode(withName: "//snowman.scarf.tail"),
                    let collar = renderer.root.childNode(withName: "//snowman.scarf.collar") as? SKShapeNode {
                     let bounds = collar.path!.boundingBoxOfPath
@@ -852,7 +856,7 @@ enum FeatureChecks {
         checks["texturedSnowmanHasScarfAndBucket"] = renderer.root.childNode(withName: "//snowman.scarf") != nil && renderer.root.childNode(withName: "//snowman.bucket") != nil
         renderer.drawGame(game, surfaces: [floor], appearance: .simple)
         checks["snowStyleSwitchPreservesGameAndBucket"] = renderer.root.childNode(withName: "//snow.ball.material") == nil &&
-            renderer.root.childNode(withName: "//snowman.scarf") == nil && renderer.root.childNode(withName: "//snowman.bucket") != nil && game.balls.count == 3
+            renderer.root.childNode(withName: "//snowman.scarf") != nil && renderer.root.childNode(withName: "//snowman.bucket") != nil && game.balls.count == 3
         var preferences = SnowSettings(); preferences.snowAppearance = .simple
         let scene = SnowScene(size: floor.frame.size, seed: 17)
         scene.settings = { preferences }; scene.isRunning = false

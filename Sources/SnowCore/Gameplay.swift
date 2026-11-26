@@ -22,6 +22,27 @@ public struct GlassFlight: Equatable {
     public var progress: CGFloat { min(1, max(0, elapsed / duration)) }
 }
 
+public enum SnowmanVariant: Int, CaseIterable, Hashable, Sendable {
+    case festive, winterBroom, classicBucket, waving
+}
+
+/// One shared cycle serves all displays. Previews and tests use independent cycles.
+public final class SnowmanVariantCycle {
+    public static let shared = SnowmanVariantCycle(start: Int.random(in: 0..<SnowmanVariant.allCases.count))
+    private let lock = NSLock()
+    private var index: Int
+    public init(start: Int = 0) {
+        let count = SnowmanVariant.allCases.count
+        index = ((start % count) + count) % count
+    }
+    public func next() -> SnowmanVariant {
+        lock.lock(); defer { lock.unlock() }
+        let variant = SnowmanVariant.allCases[index]
+        index = (index + 1) % SnowmanVariant.allCases.count
+        return variant
+    }
+}
+
 public struct SnowImpact: Equatable {
     public let id: UInt64
     public let position: CGPoint
@@ -73,7 +94,10 @@ public final class SnowGame {
     private var pointerSamples: [(point: CGPoint, time: TimeInterval)] = []
     private var lastMotion: (velocity: CGVector, time: TimeInterval)?
     public private(set) var lastReleaseVelocity = CGVector.zero
-    public init(balls: [Snowball] = []) {
+    private let variantCycle: SnowmanVariantCycle
+    private var variantsByHead: [UInt64: SnowmanVariant] = [:]
+    public init(balls: [Snowball] = [], variantCycle: SnowmanVariantCycle = .shared) {
+        self.variantCycle = variantCycle
         self.balls = Array(balls.prefix(Self.ballLimit))
         BallIdentity.reserve(through: balls.map(\.id).max() ?? 0)
     }
@@ -86,7 +110,23 @@ public final class SnowGame {
         }
         return Array(result.prefix(Self.snowmanLimit))
     }
-    public func clear() { balls.removeAll(); impacts.removeAll(); cancelDrag(); message = nil }
+    /// Appearance is assigned only to complete stacks and remains stable on redraw.
+    public func snowmanVariants() -> [UInt64: SnowmanVariant] {
+        let groups = snowmen
+        let heads = Set(groups.compactMap(\.last))
+        variantsByHead = variantsByHead.filter { heads.contains($0.key) }
+        for group in groups {
+            guard let head = group.last, variantsByHead[head] == nil else { continue }
+            variantsByHead[head] = variantCycle.next()
+        }
+        return variantsByHead
+    }
+    private func invalidateSnowman(containing id: UInt64) {
+        for group in snowmen where group.contains(id) {
+            if let head = group.last { variantsByHead.removeValue(forKey: head) }
+        }
+    }
+    public func clear() { balls.removeAll(); impacts.removeAll(); variantsByHead.removeAll(); cancelDrag(); message = nil }
     public func cancelDrag() { draggedID = nil; start = nil; sourceID = nil; previous = nil; pointerSamples.removeAll(); pickupOffset = .zero; lastMotion = nil; rollingOnSnow = false }
     public func hit(at point: CGPoint, surfaces: [SnowSurface]) -> UInt64? {
         balls.reversed().first { ball in
@@ -98,6 +138,7 @@ public final class SnowGame {
         message = nil; cancelDrag(); start = point; previous = point
         sample(point, at: time)
         if let id = hit(at: point, surfaces: surfaces), let index = balls.firstIndex(where: { $0.id == id }) {
+            invalidateSnowman(containing: id)
             detachDependents(of: id)
             draggedID = id; balls[index].surfaceID = nil; balls[index].supportID = nil
             pickupOffset = CGPoint(x: point.x - balls[index].position.x, y: point.y - balls[index].position.y)
@@ -313,6 +354,9 @@ public final class SnowGame {
         }.count
         if groups > Self.snowmanLimit { target.balls = old; message = "game.limit"; target.message = "game.limit"; return false }
         let ids = Set(selected.map(\.id)); balls.removeAll { ids.contains($0.id) }
+        for id in ids {
+            if let variant = variantsByHead.removeValue(forKey: id) { target.variantsByHead[id] = variant }
+        }
         return true
     }
     public func step(delta: Double, surfaces: [SnowSurface], profiles: [UInt32: SnowProfile], size: CGSize, reduceMotion: Bool = false) {
