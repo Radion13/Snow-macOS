@@ -62,7 +62,7 @@ static double flakeAngle(uint64_t id,double time,bool reduce){
 void flakeArtwork(int variant,double diameter,double opacity=1){
  const double radius=diameter*.43;
  const double stroke=std::max(1.05,diameter*.048);
- const bool small=diameter<15;
+ const bool smallFlake=diameter<15;
  constexpr uint32_t white=0xFFFFFF;
  auto vertex=[](double angle,double r){return V{std::cos(angle)*r,std::sin(angle)*r};};
  auto ring=[&](double r,double weight){
@@ -82,33 +82,33 @@ void flakeArtwork(int variant,double diameter,double opacity=1){
  }
  if(variant==2||variant==6){
   ring(radius,1);
-  if(variant==6&&!small){
+  if(variant==6&&!smallFlake){
    for(int shift=0;shift<2;shift++){
     const double a=pi/6+shift*pi/3;
     line({vertex(a,radius),vertex(a+2*pi/3,radius),vertex(a+4*pi/3,radius),vertex(a,radius)},
          white,stroke*.72,opacity*.75);
    }
-  }else if(!small)ring(radius*.58,.72);
-  if(variant==2||small)circle({},stroke*.62,white,opacity*.96);
+  }else if(!smallFlake)ring(radius*.58,.72);
+  if(variant==2||smallFlake)circle({},stroke*.62,white,opacity*.96);
   return;
  }
  for(int arm=0;arm<6;arm++){
   const double angle=pi/2+arm*pi/3;
   if(variant==4){
    line({{},vertex(angle,radius*.75)},white,stroke,opacity);
-   const V center=vertex(angle,radius*.79),side=vertex(angle+pi/2,radius*(small?.20:.15));
+   const V center=vertex(angle,radius*.79),side=vertex(angle+pi/2,radius*(smallFlake?.20:.15));
    polygon({vertex(angle,radius),center+side,vertex(angle,radius*.56),center-side},white,0,0,opacity*.97);
    continue;
   }
   line({{},vertex(angle,radius)},white,variant==3?stroke*.84:stroke,opacity);
-  const int branches=small?1:variant==3?2:3;
+  const int branches=smallFlake?1:variant==3?2:3;
   for(int joint=0;joint<branches;joint++){
-   const double along=small?.57:.38+joint*.19;
+   const double along=smallFlake?.57:.38+joint*.19;
    const double reach=radius*(variant==3?.20:.34)*(1-along*.28);
    const V at=vertex(angle,radius*along);
    line({at+vertex(angle+pi*.32,reach),at,at+vertex(angle-pi*.32,reach)},white,stroke*.82,opacity);
   }
-  if(variant==7&&!small)line({{},vertex(angle+pi/6,radius*.53)},white,stroke*.73,opacity*.78);
+  if(variant==7&&!smallFlake)line({{},vertex(angle+pi/6,radius*.53)},white,stroke*.73,opacity*.78);
  }
  circle({},stroke*.58,white,opacity);
 }
