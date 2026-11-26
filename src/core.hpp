@@ -75,7 +75,28 @@ struct Cleaner {
  void step(double dt,double width,const Settings&s,Profile*profile){time+=dt;if(s.automaticCleaner&&s.bottom&&profile&&profile->filled()>=.6)start(s.cleaner,true);if(!active)return;double next=x+160*dt;if(profile)collected=std::min(1400.,collected+profile->clear(x+90,next+98));distance+=next-x;x=next;if(x>width+120)active=false;}
  double load()const{return std::min(1.,collected/1400);}
 };
-struct Ball {uint64_t id=0,surface=0,support=0;double radius=6,localX=0,anchor=0;V p,velocity;bool loose=false;};
+enum class SnowmanVariant { festive, winterBroom, classicBucket, waving };
+class SnowmanCycle {
+ int index;
+public:
+ explicit SnowmanCycle(int start):index((start%4+4)%4){}
+ SnowmanVariant next(){
+  auto variant=static_cast<SnowmanVariant>(index);
+  index=(index+1)%4;
+  return variant;
+ }
+};
+inline SnowmanCycle& sessionSnowmanCycle(){
+ static SnowmanCycle cycle(int(std::random_device{}()%4));
+ return cycle;
+}
+struct Ball {
+ uint64_t id=0,surface=0,support=0;
+ double radius=6,localX=0,anchor=0;
+ V p,velocity;
+ bool loose=false;
+ int snowmanLook=-1;
+};
 struct GlassFlight {V start,target;double radius=6,age=0;int variant=0;};
 struct GlassMark {V p;double radius=20,age=0;int variant=0;};
 struct TreePose {V p;double sx=0,sy=0,opacity=0,lights=0;};
@@ -90,9 +111,9 @@ struct HolidayTrees {
   {{.04,68,.16},{.29,88,0},{.51,100,.24},{.70,76,.08},{.90,94,.18}},
   {{.09,90,.26},{.31,64,.10},{.46,82,0},{.68,100,.18},{.89,74,.06}}};
  void choose(){state=state*6364136223846793005ull+1442695040888963407ull;if(layout<0)layout=int((state>>32)%6);else{int n=int((state>>32)%5);layout=n>=layout?n+1:n;}}
- std::vector<TreePose> poses(V size,double growth,const Profile*ground)const{
+ std::vector<TreePose> poses(V size,double growth,const Profile*ground,double groundLeft=0)const{
   std::vector<TreePose> result;if(size.x<=0||size.y<=16)return result;double inset=std::min(24.,size.x*.04),f=std::min({1.,std::max(0.,(size.x-inset*2)/640),std::max(0.,(size.y-16)/140)});
-  for(auto a:layouts[layout<0?0:layout]){double scale=a.h/270*f*1.25,half=96*scale*.9,x=std::max(half+f,std::min(size.x-half-f,inset+a.x*(size.x-2*inset)));double p=clamp((growth*1.25-a.delay)/.9,0,1),ease=1-std::pow(1-p,3);double snow=std::min(ground?ground->height(x):0,std::max(0.,size.y-290*scale)),settled=std::max(-6*scale,snow-48*scale),y=settled-(1-ease)*(std::max(0.,settled)+290*scale);result.push_back({{x,y},scale*.9*(.93+.07*ease),scale*(.94+.06*ease),std::min(1.,p*6),clamp((p-.65)/.35,0,1)});}return result;
+  for(auto a:layouts[layout<0?0:layout]){double scale=a.h/270*f*1.25,half=96*scale*.9,x=std::max(half+f,std::min(size.x-half-f,inset+a.x*(size.x-2*inset)));double p=clamp((growth*1.25-a.delay)/.9,0,1),ease=1-std::pow(1-p,3);double snow=std::min(ground?ground->height(x-groundLeft):0,std::max(0.,size.y-290*scale)),settled=std::max(-6*scale,snow-48*scale),y=settled-(1-ease)*(std::max(0.,settled)+290*scale);result.push_back({{x,y},scale*.9*(.93+.07*ease),scale*(.94+.06*ease),std::min(1.,p*6),clamp((p-.65)/.35,0,1)});}return result;
  }
 };
 struct Game {
@@ -104,9 +125,37 @@ struct Game {
  bool visible(const Ball&b,const std::vector<Surface>&surfaces)const{auto*s=surface(b.surface,surfaces);return !b.surface||(s&&s->contains(b.localX));}
  uint64_t hit(V p,const std::vector<Surface>&s)const{for(auto i=balls.rbegin();i!=balls.rend();++i)if(visible(*i,s)&&length(i->p-p)<=i->radius+8)return i->id;return 0;}
  std::vector<std::vector<uint64_t>> snowmen()const{std::vector<std::vector<uint64_t>> out;for(auto&b:balls)if(!b.support&&b.id!=dragged){for(auto&m:balls)if(m.support==b.id&&m.radius<b.radius)for(auto&h:balls)if(h.support==m.id&&h.radius<m.radius)out.push_back({b.id,m.id,h.id});}return out;}
+ void updateSnowmen(SnowmanCycle& cycle=sessionSnowmanCycle()){
+  std::set<uint64_t> heads;
+  for(const auto& group:snowmen()){
+   auto* head=find(group.back());
+   heads.insert(head->id);
+   if(head->snowmanLook<0)head->snowmanLook=static_cast<int>(cycle.next());
+  }
+  for(auto& ball:balls)if(!heads.count(ball.id))ball.snowmanLook=-1;
+ }
+ void invalidateSnowman(uint64_t id){
+  for(const auto& group:snowmen()){
+   if(std::find(group.begin(),group.end(),id)!=group.end())find(group.back())->snowmanLook=-1;
+  }
+ }
  void sample(V p,double t){if(t>lastTime&&length(p-lastPointer)>.5){motion=(p-lastPointer)*(1/clamp(t-lastTime,.008,.14));motionTime=t;}lastPointer=p;lastTime=t;}
  std::set<uint64_t> descendants(uint64_t id)const{std::set<uint64_t> ids{id};for(int i=0;i<2;i++)for(auto&b:balls)if(ids.count(b.support))ids.insert(b.id);return ids;}
- void detach(uint64_t id){auto ids=descendants(id);for(auto&b:balls)if(b.id!=id&&ids.count(b.id)){b.surface=b.support=0;b.velocity={};}}
+ bool transferStack(uint64_t root,Game& target,const Surface& surface,double x){
+  auto ids=descendants(root);
+  if(ids.count(dragged)||target.balls.size()+ids.size()>30)return false;
+  size_t groups=0;
+  for(const auto& group:snowmen())if(ids.count(group.back()))groups++;
+  if(groups&&target.snowmen().size()+groups>5)return false;
+  for(auto ball:balls)if(ids.count(ball.id)){
+   ball.localX=x;
+   ball.p=surface.point(x,ball.anchor);
+   target.balls.push_back(ball);
+  }
+  balls.erase(std::remove_if(balls.begin(),balls.end(),[&](const Ball& ball){return ids.count(ball.id)>0;}),balls.end());
+  return true;
+ }
+ void detach(uint64_t id){invalidateSnowman(id);auto ids=descendants(id);for(auto&b:balls)if(b.id!=id&&ids.count(b.id)){b.surface=b.support=0;b.velocity={};}}
  void begin(V p,double time,const std::vector<Surface>&s,std::map<uint64_t,Profile>&profiles,bool loose=false){
   dragged=source=0;gesture=true;looseGesture=loose;beginPoint=previous=lastPointer=p;lastTime=time;motionTime=-1e9;offset={};message.clear();
   if(!loose)if(uint64_t id=hit(p,s)){detach(id);auto*b=find(id);dragged=id;offset=p-b->p;b->surface=b->support=0;b->velocity={};return;}
@@ -130,6 +179,7 @@ struct Game {
     for(auto&sf:s){auto it=profiles.find(sf.id);if(sf.side||it==profiles.end())continue;V q=sf.local(b->p);double h=it->second.height(q.x);if(sf.contains(q.x)&&q.y>=0&&q.y-b->radius<=h+1&&q.y<=h+b->radius+1){b->p.y=sf.point(q.x,h+b->radius).y;b->surface=sf.id;b->localX=q.x;b->anchor=h+b->radius;b->velocity={};}}
    }
   }dragged=source=0;gesture=false;
+  updateSnowmen();
  }
  void remove(V p,const std::vector<Surface>&s){auto id=hit(p,s);if(!id){marks.erase(std::remove_if(marks.begin(),marks.end(),[&](auto&m){return length(m.p-p)<=m.radius;}),marks.end());return;}auto ids=descendants(id);balls.erase(std::remove_if(balls.begin(),balls.end(),[&](auto&b){return ids.count(b.id);}),balls.end());if(ids.count(dragged)){dragged=0;gesture=false;}}
  void clear(){balls.clear();flights.clear();marks.clear();dragged=source=0;gesture=false;message.clear();}
@@ -149,6 +199,7 @@ struct Game {
   }
   for(int k=0;k<2;k++)for(auto&b:balls)if(auto*a=find(b.support)){b.p={a->p.x,a->p.y+a->radius+b.radius};b.surface=a->surface;b.localX=a->localX;b.anchor=a->anchor+a->radius+b.radius;b.velocity=a->velocity;}
   std::set<uint64_t> gone;for(auto&b:balls)if(!b.support&&b.p.y< -300){auto ids=descendants(b.id);gone.insert(ids.begin(),ids.end());}balls.erase(std::remove_if(balls.begin(),balls.end(),[&](auto&b){return gone.count(b.id);}),balls.end());
+  if(balls.size()>=3)updateSnowmen();
  }
 };
 struct Particle {
@@ -170,7 +221,17 @@ struct Simulation {
  }
  void growTree(bool reduce){trees.choose();tree=true;treeGrowth=reduce?1:0;}
  void removeTree(){tree=false;treeGrowth=0;}
- std::vector<TreePose> treePoses()const{if(!tree)return {};auto it=profiles.find(bottomID);return trees.poses(size,treeGrowth,it==profiles.end()?nullptr:&it->second);}
+ std::vector<TreePose> treePoses(double floorInset=0)const{
+  if(!tree)return {};
+  const Surface* taskbar=floorInset>0?Game::surface(taskbarID,surfaces):nullptr;
+  if(taskbar&&(taskbar->side||std::abs(taskbar->base-floorInset)>.001))taskbar=nullptr;
+  const auto profile=profiles.find(taskbar?taskbarID:bottomID);
+  const bool hasGroundSnow=(floorInset==0||taskbar)&&profile!=profiles.end();
+  auto poses=trees.poses({size.x,size.y-floorInset},treeGrowth,hasGroundSnow?&profile->second:nullptr,
+                        taskbar?taskbar->left:0);
+  for(auto& pose:poses)pose.p.y+=floorInset;
+  return poses;
+ }
  void clear(){for(auto&v:profiles)v.second.clear();particles.erase(std::remove_if(particles.begin(),particles.end(),[](auto&p){return p.scattered;}),particles.end());game.clear();cleaner.clear();}
  bool emitArea(V p,double area,double direction,uint64_t source,int limit){
   if(area<=0||limit<=0)return false;

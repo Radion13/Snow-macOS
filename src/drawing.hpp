@@ -33,6 +33,7 @@ struct Painter {
  void star(V center,double radius,uint32_t c,double alpha=1){std::vector<Gdiplus::PointF>a;for(int i=0;i<10;i++){double angle=pi/2+i*pi/5,r=radius*(i%2?.45:1);a.push_back(point({center.x+std::cos(angle)*r,center.y+std::sin(angle)*r}));}Gdiplus::GraphicsPath p;p.AddPolygon(a.data(),10);path(p,c,0,0,alpha);}
  #include "tree-vector.inc"
  #include "effects-drawing.inc"
+ #include "snowman-drawing.inc"
  void wheel(V center,double radius,bool retro,double distance,bool reduce){auto state=g.Save();g.TranslateTransform(REAL(center.x),REAL(center.y));if(!reduce)g.RotateTransform(REAL(-distance/radius*180/pi));uint32_t dark=retro?0x202634:0x29495D;circle({},radius,retro?0x8991B5:0x2D4F64,1,dark,retro?3:1);int n=retro?10:22;
   for(int i=0;i<n;i++){double angle=i*2*pi/n;auto st=g.Save();g.TranslateTransform(REAL(std::cos(angle)*(radius-1.6)),REAL(std::sin(angle)*(radius-1.6)));g.RotateTransform(REAL(angle*180/pi));rect(-2.6,-1.5,retro?6:4.7,3,retro?dark:0x3B6075);g.Restore(st);}
   circle({},radius*.58,retro?0x717B9E:0xE0E8EB,1,dark,retro?2.8:.7);for(int i=0;i<4;i++){double a=i*pi/2+.3;circle({std::cos(a)*radius*.39,std::sin(a)*radius*.39},std::max(1.,radius*.055),i==0?0xE8B46B:retro?0xCFD4E7:0x9AAFB9);}circle({},radius*.22,retro?0xE9E8EE:dark,1,dark,retro?2.4:0);g.Restore(state);
@@ -57,6 +58,6 @@ struct Painter {
   if(s.style==1){int spans=std::max(1,int(std::round(w/280)));for(int k=0;k<spans;k++){double left=w*k/spans,right=w*(k+1)/spans;std::vector<V>wire;for(int i=0;i<=40;i++){double t=i/40.;wire.push_back({left+(right-left)*t,h-12-35*std::sin(pi*t)});}line(wire,0xEEEEEE,1,.9);for(int i=0;i<=6;i++){double t=i/6.;V q={left+(right-left)*t,h-12-35*std::sin(pi*t)};bool large=i==0||i==6;q.y-=large?0:10;uint32_t c=colors[(k+i)%colors.size()];double a=light(sim.time,k*7+i,s,reduce);halo(q,large?28:15,c,a);star(q,large?16:8,c,a);}}return;}
   int wires=s.style==0?3:2;for(int row=0;row<wires;row++){auto at=[&](double t){double sag=s.style==0?(22+12*std::sin(t*pi*6+row*2.1)):(30+8*std::sin(t*pi*4+row*2));return V{w*t,h-2-std::sin(pi*t)*sag};};std::vector<V>a;for(int i=0;i<=160;i++)a.push_back(at(i/160.));line(a,s.style==0?0x4F9984:0xEEEEEE,s.style==0?1.5:1,.9);int n=std::min(170,std::max(2,int(w/(s.style==0?68:80))));for(int i=0;i<n;i++){V q=at((i+.5)/n);bool up=(i+row)%2==0;q.y+=up?7:-9;uint32_t c=colors[(i+row*2)%colors.size()];double alpha=light(sim.time,row*n+i,s,reduce);halo(q,s.style==0?14:27,c,alpha);ellipse(q,s.style==0?2.7:2.2,s.style==0?7:5.5,c,alpha);ellipse(q+V{-.2,.2},.8,4,0xFFFFFF,alpha*.85);}}
  }
- void draw(const Simulation&sim,const Settings&s,bool reduce,Gdiplus::Image*badge=nullptr){flakes(sim,s,reduce);tree(sim,s,reduce);terrain(sim,s);balls(sim,s);tractor(sim.cleaner,reduce,nullptr);garland(sim,s,reduce);glass(sim,s);(void)badge;}
+ void draw(const Simulation&sim,const Settings&s,bool reduce,Gdiplus::Image*badge=nullptr,bool patternsAlreadyDrawn=false,double treeFloorInset=0){flakes(sim,s,reduce,patternsAlreadyDrawn);tree(sim,s,reduce,treeFloorInset);terrain(sim,s);balls(sim,s);tractor(sim.cleaner,reduce,nullptr);garland(sim,s,reduce);glass(sim,s);(void)badge;}
 };
 } // namespace snow

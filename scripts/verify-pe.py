@@ -51,7 +51,7 @@ def pe(path):
                 bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
 
 application = ROOT/'dist/Snow/Snow.exe'
-installer = ROOT/'dist/SnowSetup-0.2.19-win-x64.exe'
+installer = ROOT/'dist/SnowSetup-0.3.9-win.6-x64.exe'
 info = {'application': pe(application), 'installer': pe(installer)}
 assert info['application']['machine']=='0x8664', 'Application must be native x64'
 assert info['application']['subsystem']==2, 'Application must use the GUI subsystem'
@@ -68,7 +68,7 @@ for f in ['assets/snow.ico','assets/cabin.png','assets/porch.png','assets/tree-v
 info['payload'] = [str(p.relative_to(ROOT/'dist/Snow')) for p in sorted((ROOT/'dist/Snow').rglob('*')) if p.is_file()]
 (ROOT/'build/pe-verification.json').write_text(json.dumps(info,indent=2),encoding='utf-8')
 (ROOT/'dist/SHA256SUMS.txt').write_text(
-    info['installer']['sha256']+'  SnowSetup-0.2.19-win-x64.exe\n'+
+    info['installer']['sha256']+'  SnowSetup-0.3.9-win.6-x64.exe\n'+
     info['application']['sha256']+'  Snow/Snow.exe\n', encoding='ascii')
 print('Verified x64 PE, resources, system DLL dependencies and installer payload')
 print('Installer SHA-256: '+info['installer']['sha256'])

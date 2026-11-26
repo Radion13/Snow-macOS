@@ -3,8 +3,8 @@
 This repository is the standalone Windows port: C++17, Win32, GDI+, CMake.
 Windows work lives on the `windows` branch of Radion13/Snow-macOS; its root is
 the Windows project. Push Windows fixes to this branch, not the macOS `main`.
-The current app is 0.2.19-win.1, based on macOS 0.2.19. Later macOS UI and
-snowman changes are not implemented here. Read README.md and docs/DEVELOPMENT.md.
+The current app is 0.3.9-win.6, based on the macOS 0.3.9 behavior and artwork.
+Read README.md and docs/DEVELOPMENT.md.
 
 ## Work locally on Windows
 
@@ -14,7 +14,7 @@ snowman changes are not implemented here. Read README.md and docs/DEVELOPMENT.md
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Build-Windows.ps1`.
   It uses Visual Studio C++ and Windows SDK through CMake, stages the app in
   `dist-native/Snow`, and fails on build or test errors.
-- Close the normal app before running native diagnostics:
+- Run native diagnostics:
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Windows.ps1`.
   The default executable is the newly staged native build, not the old installer.
   Logs are under `build/diagnostics`. Do not terminate an unrelated application.

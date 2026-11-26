@@ -21,6 +21,6 @@ if [[ -f .tools/zig-aarch64-macos-0.17.1/lib/libcxx/LICENSE.TXT ]]; then
  cp .tools/zig-aarch64-macos-0.17.1/lib/libcxx/LICENSE.TXT dist/Snow/licenses/LLVM.txt
 fi
 cp .tools/nsis/nsis-bundle/LICENSE dist/Snow/licenses/NSIS.txt
-"$PWD/.tools/nsis/nsis-bundle/makensis" -V2 "-DAPPDIR=$PWD/dist/Snow" "-DOUTFILE=$PWD/dist/SnowSetup-0.2.19-win-x64.exe" installer/snow.nsi > build/installer.log 2>&1
+"$PWD/.tools/nsis/nsis-bundle/makensis" -V2 "-DAPPDIR=$PWD/dist/Snow" "-DOUTFILE=$PWD/dist/SnowSetup-0.3.9-win.6-x64.exe" installer/snow.nsi > build/installer.log 2>&1
 python3 scripts/verify-pe.py
-print "Created: $PWD/dist/SnowSetup-0.2.19-win-x64.exe"
+print "Created: $PWD/dist/SnowSetup-0.3.9-win.6-x64.exe"

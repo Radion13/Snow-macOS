@@ -1,7 +1,8 @@
 param(
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Release',
     [switch]$Smoke,
-    [switch]$Launch
+    [switch]$Launch,
+    [switch]$Installer
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -36,4 +37,12 @@ Invoke-Native $cmakePath @('--install', $build, '--config', $Configuration, '--p
 $executable = Join-Path $stage 'Snow.exe'
 if ($Smoke) { & (Join-Path $PSScriptRoot 'Test-Windows.ps1') -Executable $executable }
 Write-Host "Built and tested: $executable"
+if ($Installer) {
+    $nsis = Get-Command makensis.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    $nsisPath = if ($nsis) { $nsis.Source } else { Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe' }
+    if (-not (Test-Path -LiteralPath $nsisPath)) { throw 'Install NSIS or put makensis.exe on PATH.' }
+    $installerPath = Join-Path (Split-Path $stage -Parent) 'SnowSetup-0.3.9-win.6-x64.exe'
+    Invoke-Native $nsisPath @('/V2', '/INPUTCHARSET', 'UTF8', '/DAPPSEP=\', "/DAPPDIR=$stage", "/DOUTFILE=$installerPath", (Join-Path $root 'installer\snow.nsi'))
+    Get-FileHash -Algorithm SHA256 -LiteralPath $installerPath
+}
 if ($Launch) { Start-Process -FilePath $executable -ArgumentList '--settings' }

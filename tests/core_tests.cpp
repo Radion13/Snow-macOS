@@ -42,5 +42,40 @@ int main(){try{
  test("bounded carry pool preserves area when quality decreases",[]{Simulation sim({800,600});for(int i=0;i<1000;i++)sim.particles.push_back({{400,500},40,0,2,.8,30,true,3,0,uint64_t(i+1)});sim.trim(360);double sum=0;for(auto p:sim.particles)sum+=p.area;check(sim.particles.size()==360&&std::abs(sum-3000)<1e-8,"budget discarded carried snow");});
  test("new natural snow does not flatten a hand-made mound",[]{auto p=filled();p.take(300,24,300);p.addArea(400,24,300);double before=p.height(400);p.deposit(400,1);check(p.height(400)>=before,"manual mound was erased");});
  test("clear removes glass snow and loose snow",[]{Game g;g.marks.push_back({{200,200},40,1,2});g.flights.push_back({{200,200},{400,300},20,0,1});g.balls.push_back({1,0,0,9,0,0,{100,200},{},true});g.clear();check(g.marks.empty()&&g.flights.empty()&&g.balls.empty(),"clear retained objects");});
+ auto stack=[](){
+  Game g;
+  g.balls={{8100,bottomID,0,33,200,33,{200,33},{}},
+           {8101,bottomID,8100,24,200,90,{200,90},{}},
+           {8102,bottomID,8101,17,200,131,{200,131},{}}};
+  return g;
+ };
+ test("complete snowmen share a four-look cycle across displays",[&]{
+  SnowmanCycle cycle(2);
+  Game incomplete=stack();incomplete.balls.pop_back();incomplete.updateSnowmen(cycle);
+  for(int look:{2,3,0,1,2}){
+   Game g=stack();g.updateSnowmen(cycle);
+   check(g.balls.back().snowmanLook==look,"unexpected look or incomplete stack advanced the cycle");
+   g.balls.back().p.x+=80;g.updateSnowmen(cycle);
+   check(g.balls.back().snowmanLook==look,"redraw or movement changed a completed snowman");
+  }
+ });
+ test("reassembling a snowman assigns the next look",[&]{
+  SnowmanCycle cycle(0);
+  Game g=stack();g.updateSnowmen(cycle);
+  g.invalidateSnowman(8101);
+  g.updateSnowmen(cycle);
+  check(g.balls.back().snowmanLook==1,"reassembly reused the previous look");
+ });
+ test("a snowman moves to another display as one group with its look",[&]{
+  SnowmanCycle cycle(3);
+  Game from=stack(),to;
+  from.updateSnowmen(cycle);
+  check(from.transferStack(8100,to,floorSurface(),294),"transfer rejected a complete group");
+  to.updateSnowmen(cycle);
+  check(from.balls.empty()&&to.snowmen().size()==1&&to.balls.back().snowmanLook==3
+    &&to.balls.back().p.x==294,"transfer split the group or changed the appearance");
+  Game later=stack();later.updateSnowmen(cycle);
+  check(later.balls.back().snowmanLook==0,"moving advanced the shared cycle");
+ });
  std::cout<<tests<<" tests passed\n";return 0;
  }catch(const std::exception&e){std::cerr<<"FAILED: "<<e.what()<<"\n";return 1;}}

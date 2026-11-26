@@ -38,42 +38,95 @@ void contour(const Surface&s,const Profile&p,Span span,bool textured){
  else this->path(path,0xFAFAFC,0,0,.97);
 }
 void terrain(const Simulation&sim,const Settings&s){for(auto&sf:sim.surfaces){auto it=sim.profiles.find(sf.id);if(it!=sim.profiles.end())for(auto span:sf.visible)if(span.hi>span.lo)contour(sf,it->second,span,s.appearance==1);}}
-void balls(const Simulation&sim,const Settings&s){
- std::set<uint64_t>heads;for(auto ids:sim.game.snowmen())heads.insert(ids.back());
- for(auto&b:sim.game.balls)if(sim.game.visible(b,sim.surfaces))sphere(b.p,b.radius,s.appearance==1);
- for(auto&b:sim.game.balls)if(heads.count(b.id)&&sim.game.visible(b,sim.surfaces)){
-  double r=b.radius;auto state=g.Save();g.TranslateTransform(REAL(b.p.x),REAL(b.p.y));
-  if(s.appearance==1){line({{-r*.72,-r*.88},{r*.72,-r*.88}},0xBD343B,r*.27);rect(-r*.36,-r*1.65,r*.28,r*.82,0xD43F46);rect(-r*.36,-r*1.43,r*.28,r*.06,0xF3D7C8);rect(-r*.36,-r*1.57,r*.28,r*.06,0xF3D7C8);}
-  for(double x:{-.28,.28})circle({x*r,.25*r},std::max(1.4,r*.08),0x293F4A);
-  polygon({{-r*.06,r*.06},{r*.82,-r*.04},{-r*.06,-r*.23}},0xDA833C);
-  for(double x:{-.32,-.16,0.,.16,.32})circle({x*r,r*(-.44+std::abs(x)*.3125)},std::max(.8,r*.055),0x293F4A);
-  g.TranslateTransform(0,REAL(r*.78));g.RotateTransform(-5.7f);
-  Gdiplus::GraphicsPath handle;handle.AddBezier(point({-r*.50,r*.76}),point({-r*1.03,r*1.05}),point({-r*1.08,r*.08}),point({-r*.62,r*.10}));Gdiplus::Pen pen(color(0x405B6B),1);g.DrawPath(&pen,&handle);
-  polygon({{-r*.82,0},{r*.82,0},{r*.58,r*.95},{-r*.58,r*.95}},0x809EAE,0x405B6B,.8);
-  polygon({{-r*.62,r*.12},{-r*.32,r*.12},{-r*.27,r*.82},{-r*.45,r*.82}},0xCEE0E6);rect(-r*.9,-r*.04,r*1.8,std::max(2.,r*.13),0xB3CAD4);g.Restore(state);
- }
-}
 Gdiplus::Bitmap&treeLayer(int layer){return cached(layer,384,580,[&](Painter&p){p.g.TranslateTransform(192,568);p.g.ScaleTransform(2,-2);p.treeArtwork(layer);});}
-void tree(const Simulation&sim,const Settings&s,bool reduce){
- int index=0;for(auto pose:sim.treePoses()){
+void tree(const Simulation&sim,const Settings&s,bool reduce,double floorInset=0){
+ if(!sim.tree)return;
+ const auto saved=floorInset>0?g.Save():0;
+ if(floorInset>0)g.SetClip(Gdiplus::RectF(0,REAL(floorInset),REAL(sim.size.x),REAL(sim.size.y-floorInset)),Gdiplus::CombineModeIntersect);
+ int index=0;for(auto pose:sim.treePoses(floorInset)){
   for(int layer=0;layer<5;layer++){double alpha=pose.opacity;if(layer>0)alpha*=pose.lights*light(sim.time,layer==4?29+index*11:index*7+(layer-1)*3,s,reduce,true);image(treeLayer(layer),pose.p.x-96*pose.sx,pose.p.y-6*pose.sy,192*pose.sx,290*pose.sy,alpha);}index++;
  }
+ if(floorInset>0)g.Restore(saved);
 }
-Gdiplus::Bitmap&flake(int variant){return cached(10+variant,192,192,[&](Painter&p){
- p.g.TranslateTransform(96,96);auto ray=[&](double a,double r){return V{std::cos(a)*r,std::sin(a)*r};};
- if(variant==5){for(int i=0;i<4;i++)p.polygon({{},ray(i*pi/2-.10,18),ray(i*pi/2,83),ray(i*pi/2+.10,18)},0xF5FBFF,.0,0,.96);return;}
- if(variant==2||variant==6){for(double radius:{75.,51.,27.}){std::vector<V>v;for(int i=0;i<=6;i++)v.push_back(ray(pi/6+i*pi/3,radius));p.line(v,0xF2FAFF,2,.85);}if(variant==2){p.circle({},4,0xFFFFFF);return;}}
- if(variant==1){std::vector<Gdiplus::PointF>points;for(int i=0;i<12;i++)points.push_back(point(ray(pi/2+i*pi/6,i%2?27:78)));Gdiplus::GraphicsPath shape;shape.AddPolygon(points.data(),int(points.size()));p.path(shape,0xEAF6FF,0xFFFFFF,2,.62);}
- for(int i=0;i<6;i++){
-  double angle=pi/2+i*pi/3;V end=ray(angle,77);p.line({{},end},0xF3FAFF,variant==3?1.5:2.4,.95);
-  if(variant==4){auto state=p.g.Save();p.g.TranslateTransform(REAL(end.x*.8),REAL(end.y*.8));p.g.RotateTransform(REAL(angle*180/pi));p.polygon({{12,0},{0,7},{-12,0},{0,-7}},0xE7F5FF,0xFFFFFF,1,.8);p.g.Restore(state);}
-  else if(variant!=1&&variant!=6){for(double t:{.36,.60,.78}){V at=end*t;double branch=(variant==7?14:18)*(1-t*.4);p.line({at+ray(angle+pi*.73,branch),at,at+ray(angle-pi*.73,branch)},0xF3FAFF,variant==3?1.4:2,.9);}}
- }p.circle({},3.5,0xFFFFFF);
-});}
-void flakes(const Simulation&sim,const Settings&s,bool reduce){for(auto&p:sim.particles){
- if(p.scattered||s.snowflakeStyle==0){double r=p.r*(p.scattered?1:s.snowflakeSize);circle(p.p,r*1.25,0xFFFFFF,p.alpha*.65);circle(p.p,r*.65,0xFFFFFF,p.alpha);}
- else{double side=p.r*4.4*s.snowflakeSize;auto state=g.Save();g.TranslateTransform(REAL(p.p.x),REAL(p.p.y));g.RotateTransform(REAL((p.id*2.399963+(reduce?0:sim.time*.13))*180/pi));image(flake(int(p.id%8)),-side/2,-side/2,side,side,p.alpha);g.Restore(state);}
-}}
+static double flakeDiameter(const Particle& particle,const Settings& settings){
+ return particle.r*6.6*settings.snowflakeSize;
+}
+static double flakeAngle(uint64_t id,double time,bool reduce){
+ const uint32_t seed=uint32_t(id)*2654435761u;
+ const double phase=(seed&65535)*(2*pi/65536.);
+ const double speed=(.07+(seed>>24)*(.10/255.))*((seed&1)?-1:1);
+ return phase+(reduce?0:time*speed);
+}
+// The same Windows crystal paths supply the desktop masks and settings previews.
+// At small sizes retain one clear silhouette instead of shrinking a detailed image.
+void flakeArtwork(int variant,double diameter,double opacity=1){
+ const double radius=diameter*.43;
+ const double stroke=std::max(1.05,diameter*.048);
+ const bool small=diameter<15;
+ constexpr uint32_t white=0xFFFFFF;
+ auto vertex=[](double angle,double r){return V{std::cos(angle)*r,std::sin(angle)*r};};
+ auto ring=[&](double r,double weight){
+  std::vector<V> hex;
+  for(int i=0;i<=6;i++)hex.push_back(vertex(pi/6+i*pi/3,r));
+  line(hex,white,stroke*weight,opacity);
+ };
+ if(variant==1||variant==5){
+  const int tips=variant==1?6:4;
+  std::vector<Gdiplus::PointF> points;
+  for(int i=0;i<tips*2;i++)
+   points.push_back(point(vertex(pi/2+i*pi/tips,radius*(i%2?(variant==1?.37:.21):1))));
+  Gdiplus::GraphicsPath shape;
+  shape.AddPolygon(points.data(),int(points.size()));
+  path(shape,white,white,stroke*.66,opacity*(variant==1?.76:.98));
+  return;
+ }
+ if(variant==2||variant==6){
+  ring(radius,1);
+  if(variant==6&&!small){
+   for(int shift=0;shift<2;shift++){
+    const double a=pi/6+shift*pi/3;
+    line({vertex(a,radius),vertex(a+2*pi/3,radius),vertex(a+4*pi/3,radius),vertex(a,radius)},
+         white,stroke*.72,opacity*.75);
+   }
+  }else if(!small)ring(radius*.58,.72);
+  if(variant==2||small)circle({},stroke*.62,white,opacity*.96);
+  return;
+ }
+ for(int arm=0;arm<6;arm++){
+  const double angle=pi/2+arm*pi/3;
+  if(variant==4){
+   line({{},vertex(angle,radius*.75)},white,stroke,opacity);
+   const V center=vertex(angle,radius*.79),side=vertex(angle+pi/2,radius*(small?.20:.15));
+   polygon({vertex(angle,radius),center+side,vertex(angle,radius*.56),center-side},white,0,0,opacity*.97);
+   continue;
+  }
+  line({{},vertex(angle,radius)},white,variant==3?stroke*.84:stroke,opacity);
+  const int branches=small?1:variant==3?2:3;
+  for(int joint=0;joint<branches;joint++){
+   const double along=small?.57:.38+joint*.19;
+   const double reach=radius*(variant==3?.20:.34)*(1-along*.28);
+   const V at=vertex(angle,radius*along);
+   line({at+vertex(angle+pi*.32,reach),at,at+vertex(angle-pi*.32,reach)},white,stroke*.82,opacity);
+  }
+  if(variant==7&&!small)line({{},vertex(angle+pi/6,radius*.53)},white,stroke*.73,opacity*.78);
+ }
+ circle({},stroke*.58,white,opacity);
+}
+void flakes(const Simulation& sim,const Settings& settings,bool reduce,bool patternsAlreadyDrawn){
+ for(const auto& particle:sim.particles){
+  if(particle.scattered||settings.snowflakeStyle==0){
+   const double radius=particle.r*(particle.scattered?1:settings.snowflakeSize);
+   circle(particle.p,radius*1.25,0xFFFFFF,particle.alpha*.65);
+   circle(particle.p,radius*.65,0xFFFFFF,particle.alpha);
+  }else if(!patternsAlreadyDrawn){
+   auto state=g.Save();
+   g.TranslateTransform(REAL(particle.p.x),REAL(particle.p.y));
+   g.RotateTransform(REAL(flakeAngle(particle.id,sim.time,reduce)*180/pi));
+   flakeArtwork(int(particle.id%8),std::max(6.,flakeDiameter(particle,settings)),particle.alpha);
+   g.Restore(state);
+  }
+ }
+}
 Gdiplus::Bitmap&glassMark(int variant){return cached(30+variant,192,192,[&](Painter&p){
  p.g.TranslateTransform(96,96);std::vector<Gdiplus::PointF>points;for(int i=0;i<48;i++){double angle=i*2*pi/48,r=43+grain(i,variant,92)*13;if((i+variant*3)%9==0)r+=25;points.push_back(point({std::cos(angle)*r,std::sin(angle)*r}));}
  Gdiplus::GraphicsPath path;path.AddPolygon(points.data(),int(points.size()));Gdiplus::PathGradientBrush snow(&path);Gdiplus::Color white=color(0xFFFFFF),edge=color(0xD6E5E9,.96);snow.SetCenterColor(white);int count=1;snow.SetSurroundColors(&edge,&count);snow.SetCenterPoint(Gdiplus::PointF(-12,14));p.g.FillPath(&snow,&path);
