@@ -1,0 +1,9 @@
+.tools/
+build/
+dist/
+build-native/
+dist-native/
+out/
+.vs/
+.DS_Store
+*.user

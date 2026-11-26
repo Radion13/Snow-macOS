@@ -1,0 +1,32 @@
+name: Windows build and tests
+
+on:
+  push:
+    branches: [windows]
+  pull_request:
+    branches: [windows]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build, test and stage native x64 app
+        shell: pwsh
+        run: ./scripts/Build-Windows.ps1 -Configuration Release -Smoke
+      - name: Upload portable app and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Snow-Windows-x64-${{ github.sha }}
+          path: |
+            dist-native/Snow/
+            build/diagnostics/
+            build-native/Testing/Temporary/
+          if-no-files-found: warn
+          retention-days: 14
